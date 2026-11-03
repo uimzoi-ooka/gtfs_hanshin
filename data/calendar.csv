@@ -1,0 +1,4 @@
+service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date,holiday_service
+weekday,1,1,1,1,1,0,0,20240401,20280331,holiday
+saturday,0,0,0,0,0,1,0,20240401,20280331,holiday
+holiday,0,0,0,0,0,0,1,20240401,20280331,
