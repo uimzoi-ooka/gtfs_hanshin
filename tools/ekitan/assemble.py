@@ -1,6 +1,6 @@
 """events_<DATE>.json + busstops.json -> repo data/timetables/*.csv (+ index rows) for one service_id.
 usage: assemble.py <ekdir> <DATE> <service_id> <repo>"""
-import csv, collections, json, math, os, re, statistics, sys, unicodedata
+import csv, collections, itertools, json, math, os, re, statistics, sys, unicodedata
 
 D, DATE, SERVICE, REPO = sys.argv[1:5]
 bs = json.load(open(os.path.join(D, "busstops.json")))
@@ -20,9 +20,10 @@ ALIAS = {
     "JR猪名寺(東口)": "JR猪名寺", "JR猪名寺(西口)": "JR猪名寺", "アミング潮江": "アミング潮江前", "園田学園大学": "園田学園女子大学",
     "時友": "時友(高架下)", "武庫小学校前": "武庫小学校", "竹谷小学校": "竹谷小学校前",
     "労災病院": "労災病院前", "昭和通8丁目": "昭和通八丁目", "稲葉荘1丁目": "稲葉荘一丁目",
-    # 改称と推定 (同一系統・前後停留所・位置が一致)
+    # 表記ゆれ (国土数値情報P11で同名停留所が同じ系統を持つことを確認)
+    "武庫之郷": "武庫の郷", "武庫之荘西口": "武庫荘駅西口", "南武庫之荘7丁目": "南武庫荘七丁目",
+    # 改称と推定 (国土数値情報P11(2022)の旧名・同一系統・前後停留所・位置が一致)
     "大庄北生涯学習プラザ前": "大島2丁目", "浜田町4丁目": "南警察署西分庁舎",
-    "武庫之郷": "武庫西生涯学習プラザ前",
 }
 
 
@@ -77,45 +78,82 @@ for tx, evs in trips.items():
     for a, b in zip(evs, evs[1:]):
         seg[(a["stop"], b["stop"])].append(b["m"] - a["m"])
 
-# tie-break equal minutes with precedence from other trips
+def ek_coord(sid):
+    nm = norm(name_of.get(sid, ""))
+    c = csv_by_norm.get(nm)
+    if c:
+        return c[0]["lat"], c[0]["lon"]
+    r = other_src.get(nm)
+    if r:
+        return float(r["lat"]), float(r["lon"])
+    r = extra_by_norm.get(nm)
+    if r and r["lat"] and r["lon"]:
+        return float(r["lat"]), float(r["lon"])
+    return None
+
+
+def km(a, b):
+    return math.hypot((a[0] - b[0]) * 111.0, (a[1] - b[1]) * 111.0 * math.cos(math.radians(a[0])))
+
+
+# 同じ「分」に並ぶ停留所の順序: 前後の停留所を含めた走行距離が最短になる順 (座標が無い時は他便での前後関係)
+extra_by_norm = {norm(r["stop_name"]): r for r in extra}
 prec = collections.Counter()
 for evs in tripseq.values():
     for i, a in enumerate(evs):
         for b in evs[i + 1:]:
             if b["m"] > a["m"]:
-                prec[(a["stop"], b["stop"])] += 1
+                prec[(a["line"], a["dest"], a["stop"], b["stop"])] += 1
+
+
+def order_run(run, prev, nxt):
+    if len(run) > 7:
+        return run
+    best, bestv = run, None
+    for perm in itertools.permutations(run):
+        chain = ([prev] if prev else []) + list(perm) + ([nxt] if nxt else [])
+        cs = [ek_coord(e["stop"]) for e in chain]
+        if all(cs):
+            v = (0, sum(km(a, b) for a, b in zip(cs, cs[1:])))
+        else:
+            v = (1, -sum(prec[(e["line"], e["dest"], a["stop"], b["stop"])] for a, b in zip(perm, perm[1:])))
+        if bestv is None or v < bestv:
+            best, bestv = list(perm), v
+    return best
+
+
 for tx, evs in tripseq.items():
-    changed = True
-    while changed:
-        changed = False
-        for i in range(len(evs) - 1):
-            a, b = evs[i], evs[i + 1]
-            if a["m"] == b["m"] and prec[(b["stop"], a["stop"])] > prec[(a["stop"], b["stop"])]:
-                evs[i], evs[i + 1] = b, a
-                changed = True
+    out, i = [], 0
+    while i < len(evs):
+        j = i
+        while j + 1 < len(evs) and evs[j + 1]["m"] == evs[i]["m"]:
+            j += 1
+        run = evs[i:j + 1]
+        if len(run) > 1:
+            e = run[0]
+            run = order_run(run, out[-1] if out else None, evs[j + 1] if j + 1 < len(evs) else None)
+        out.extend(run)
+        i = j + 1
+    tripseq[tx] = out
 
-
-def ek_coord(sid):
-    c = csv_by_norm.get(norm(name_of.get(sid, "")))
-    if c:
-        return c[0]["lat"], c[0]["lon"]
-    r = other_src.get(norm(name_of.get(sid, "")))
-    if r:
-        return float(r["lat"]), float(r["lon"])
-    return None
+seg = collections.defaultdict(list)
+for evs in tripseq.values():
+    for a, b in zip(evs, evs[1:]):
+        seg[(a["stop"], b["stop"])].append(b["m"] - a["m"])
 
 
 def est_minutes(a, b):
+    """終点到着の所要分を推定: ①同区間の実績 ②距離 (直線×1.3, 時速15km) ③逆方向の実績 (距離推定と大差ない場合のみ) ④2分"""
     if seg.get((a, b)):
         return max(1, round(statistics.median(seg[(a, b)]))), "segment"
-    if seg.get((b, a)):
-        return max(1, round(statistics.median(seg[(b, a)]))), "reverse"
     ca, cb = ek_coord(a), ek_coord(b)
-    if ca and cb:
-        dy = (ca[0] - cb[0]) * 111.0
-        dx = (ca[1] - cb[1]) * 111.0 * math.cos(math.radians(ca[0]))
-        km = math.hypot(dx, dy) * 1.3
-        return max(1, round(km / 15 * 60)), "distance"
+    dist = max(1, round(km(ca, cb) * 1.3 / 15 * 60)) if ca and cb else None
+    if seg.get((b, a)):
+        rev = max(1, round(statistics.median(seg[(b, a)])))
+        if dist is None or abs(rev - dist) <= max(2, dist):
+            return rev, "reverse"
+    if dist is not None:
+        return dist, "distance"
     return 2, "default"
 
 
