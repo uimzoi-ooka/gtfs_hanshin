@@ -232,10 +232,26 @@ def main():
                           "direction_id": ent["direction_id"].strip(), "shape_id": ""})
             stop_times.extend(rows)
 
+    # 緯度経度の無い停留所 (stops_extra.csv で未入力) は除外し、その停車時刻も落とす
+    nocoord = {s["stop_id"] for s in stops if not s["stop_lat"] or not s["stop_lon"]}
+    if nocoord:
+        names = sorted({by_id[i]["stop_name"] for i in nocoord})
+        dropped = sum(1 for st in stop_times if st["stop_id"] in nocoord)
+        warnings.append(f"緯度経度が未入力のため除外した停留所: {', '.join(names)} (停車時刻 {dropped} 件)")
+        stops = [s for s in stops if s["stop_id"] not in nocoord]
+        kept, seqs = [], {}
+        for st in stop_times:
+            if st["stop_id"] in nocoord:
+                continue
+            seqs[st["trip_id"]] = seqs.get(st["trip_id"], 0) + 1
+            st["stop_sequence"] = seqs[st["trip_id"]]
+            kept.append(st)
+        stop_times = kept
+        short = {t for t, n in seqs.items() if n < 2}
+        trips = [t for t in trips if t["trip_id"] not in short and t["trip_id"] in seqs]
+        stop_times = [st for st in stop_times if st["trip_id"] not in short]
+
     # 検証
-    for s in stops:
-        if not s["stop_lat"] or not s["stop_lon"]:
-            errors.append(f"stops: {s['stop_name']} の緯度経度が空です")
     if not trips:
         warnings.append("時刻表が未投入のため trips.txt / stop_times.txt が空です (GTFSとしては未完成)")
     used_routes = {t["route_id"] for t in trips}

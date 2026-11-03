@@ -41,3 +41,5 @@ R039,agency001_hanshinbus,90,,尼崎市内線地域線,3,0068B7,FFFFFF
 R040,agency001_hanshinbus,AD1,,尼崎市内線地域線,3,0068B7,FFFFFF
 R041,agency001_hanshinbus,AD2,,尼崎市内線地域線,3,0068B7,FFFFFF
 R042,agency001_hanshinbus,AD3,,尼崎市内線地域線,3,0068B7,FFFFFF
+R043,agency001_hanshinbus,12A,,尼崎市内線幹線,3,D7000F,FFFFFF
+R044,agency001_hanshinbus,52A,,尼崎市内線地域線,3,0068B7,FFFFFF
