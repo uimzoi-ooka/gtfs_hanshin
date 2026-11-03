@@ -12,6 +12,8 @@
                                      (任意) _headsign 行: 便ごとの行先上書き
                                      以降: 経路順の停留所名と HH:MM (空欄=通過/非経由)
                                      同名で標柱が複数ある停留所は "名前#S012" で stop_id を指定
+                                     時刻末尾の "*" は推定時刻 (stop_times.timepoint=0)
+  stops_extra.csv (任意)             停留所CSVに無い停留所 (stop_name,lat,lon,routes)。stops_source の後に採番
 
 出力: dist/*.txt と dist/hanshin_amagasaki_gtfs.zip
 使い方: python3 scripts/build_gtfs.py
@@ -108,6 +110,9 @@ def main():
 
     # stops: 尼崎市内線が通る停留所のみ。ID は元CSVの行順で採番 (元CSVが変わらない限り不変)
     src = read_csv(os.path.join(DATA, "stops_source.csv"))
+    extra_path = os.path.join(DATA, "stops_extra.csv")
+    if os.path.exists(extra_path):
+        src += read_csv(extra_path)
     stops = []
     for r in src:
         labels = [l for l in r["routes"].split(";") if l.startswith(ROUTE_PREFIX)]
@@ -206,8 +211,9 @@ def main():
                 cell = row[t + 1].strip() if t + 1 < len(row) else ""
                 if not cell:
                     continue
+                approx = cell.endswith("*")
                 try:
-                    tm = norm_time(cell)
+                    tm = norm_time(cell.rstrip("*"))
                 except ValueError as e:
                     errors.append(f"{where} 便{t + 1} {row[0]}: {e}")
                     continue
@@ -216,7 +222,8 @@ def main():
                 prev = tm
                 seq += 1
                 rows.append({"trip_id": trip_id, "arrival_time": tm, "departure_time": tm,
-                             "stop_id": stop_ids[r_i], "stop_sequence": seq})
+                             "stop_id": stop_ids[r_i], "stop_sequence": seq,
+                             "timepoint": "0" if approx else "1"})
             if len(rows) < 2:
                 warnings.append(f"{where} 便{t + 1}: 停車が2か所未満のため除外")
                 continue
@@ -249,7 +256,8 @@ def main():
     write_txt("calendar.txt", ["service_id"] + wd_cols + ["start_date", "end_date"], calendar)
     write_txt("calendar_dates.txt", ["service_id", "date", "exception_type"], cal_dates)
     write_txt("trips.txt", ["route_id", "service_id", "trip_id", "trip_headsign", "direction_id", "shape_id"], trips)
-    write_txt("stop_times.txt", ["trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"], stop_times)
+    write_txt("stop_times.txt", ["trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence",
+                                 "timepoint"], stop_times)
 
     names = ["feed_info.txt", "agency.txt", "stops.txt", "routes.txt", "calendar.txt",
              "calendar_dates.txt", "trips.txt", "stop_times.txt"]
