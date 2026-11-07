@@ -3,8 +3,6 @@ holiday,20240429,1
 weekday,20240429,2
 holiday,20240503,1
 weekday,20240503,2
-holiday,20240504,1
-saturday,20240504,2
 holiday,20240506,1
 weekday,20240506,2
 holiday,20240715,1
@@ -19,8 +17,6 @@ holiday,20241014,1
 weekday,20241014,2
 holiday,20241104,1
 weekday,20241104,2
-holiday,20241123,1
-saturday,20241123,2
 holiday,20250101,1
 weekday,20250101,2
 holiday,20250113,1
@@ -33,8 +29,6 @@ holiday,20250320,1
 weekday,20250320,2
 holiday,20250429,1
 weekday,20250429,2
-holiday,20250503,1
-saturday,20250503,2
 holiday,20250505,1
 weekday,20250505,2
 holiday,20250506,1
@@ -119,8 +113,6 @@ holiday,20271103,1
 weekday,20271103,2
 holiday,20271123,1
 weekday,20271123,2
-holiday,20280101,1
-saturday,20280101,2
 holiday,20280110,1
 weekday,20280110,2
 holiday,20280211,1
